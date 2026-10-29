@@ -1,0 +1,9 @@
+# 密钥目录，绝不能提交
+.ssh-keys/
+
+# WorkBuddy 本地数据
+.workbuddy/
+
+# 系统文件
+Thumbs.db
+desktop.ini
