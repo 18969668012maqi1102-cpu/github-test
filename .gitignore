@@ -7,3 +7,6 @@
 # 系统文件
 Thumbs.db
 desktop.ini
+
+# 临时提交信息文件
+commit_msg.txt
