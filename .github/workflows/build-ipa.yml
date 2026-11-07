@@ -5,13 +5,12 @@ on:
   push:
     branches: [ main ]
 
-permissions:
-  contents: write          # 发布 Release 所需（创建 IPA 资产）
-
 jobs:
   build:
     name: Build unsigned IPA for TrollStore
     runs-on: macos-latest
+    permissions:
+      contents: write      # 发布 Release 所需
     steps:
       - name: Checkout
         uses: actions/checkout@v4
