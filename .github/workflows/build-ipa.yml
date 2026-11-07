@@ -5,6 +5,9 @@ on:
   push:
     branches: [ main ]
 
+permissions:
+  contents: write          # 发布 Release 所需（创建 IPA 资产）
+
 jobs:
   build:
     name: Build unsigned IPA for TrollStore
@@ -90,3 +93,21 @@ jobs:
           name: TodoAttendance-ipa
           path: TodoAttendance.ipa
           retention-days: 30
+
+      # 同时发布到 Release：可直接下载，无需登录，便于传到手机安装
+      - name: Publish to GitHub Release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: TodoAttendance ${{ github.run_number }}
+          draft: false
+          prerelease: false
+          body: |
+            待办考勤 iOS App（TrollStore 安装版）
+
+            - 设备要求：iOS 14.0 – 16.6.1 / 17.0（需已安装 TrollStore）
+            - 安装：下载 `TodoAttendance.ipa` → 传到手机 → 用 TrollStore 打开安装
+            - 数据存放在服务端，App 本身不存业务数据
+          files:
+            - TodoAttendance.ipa
