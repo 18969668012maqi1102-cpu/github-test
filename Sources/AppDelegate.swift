@@ -204,6 +204,20 @@ final class MainViewController: UIViewController {
 
     private func cancelNativeReminder(id: String) {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["todo_\(id)"])
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ["todo_\(id)"])
+    }
+
+    /// 取消测试提醒：只清测试相关的通知，不动用户真实的待办提醒
+    private func cancelTestReminders() {
+        let center = UNUserNotificationCenter.current()
+        center.getPendingNotificationRequests { pending in
+            let ids = pending.map { $0.identifier }.filter { $0.hasPrefix("todo_test") }
+            center.removePendingNotificationRequests(withIdentifiers: ids)
+        }
+        center.getDeliveredNotifications { delivered in
+            let ids = delivered.map { $0.identifier }.filter { $0.hasPrefix("todo_test") }
+            center.removeDeliveredNotifications(withIdentifiers: ids)
+        }
     }
 
     /// 把未来的提醒排成本地系统通知。
@@ -320,6 +334,9 @@ extension MainViewController: WKScriptMessageHandler {
             scheduleNativeReminder(id: id, title: title, body: msg, delaySeconds: delay)
         case "cancelNotify":
             if let id = body["id"] as? String { cancelNativeReminder(id: id) }
+        case "cancelTest":
+            // 取消测试提醒：只清测试通知，保留用户真实待办的预排通知
+            cancelTestReminders()
         case "notifyPermission":
             UNUserNotificationCenter.current().getNotificationSettings { settings in
                 let ok = settings.authorizationStatus == .authorized
