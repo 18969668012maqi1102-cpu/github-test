@@ -33,7 +33,7 @@ jobs:
       - name: Build app (no signing)
         working-directory: .
         run: |
-          set -e
+          set -eo pipefail
           xcodebuild -scheme TodoAttendance -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
@@ -41,7 +41,17 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             -derivedDataPath build/DerivedData \
-            build
+            build 2>&1 | tee build.log || {
+            # 编译失败时把错误写进 Summary，方便直接查看（不用登录 Actions 日志页）
+            {
+              echo "### ❌ 编译失败"
+              echo ""
+              echo '```'
+              grep -E "error:|warning: .*(unused|never used|immutable)" build.log | head -40 || echo "(未匹配到 error 行)"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
 
       - name: Install ldid (fake signer)
         run: |
