@@ -94,19 +94,13 @@ jobs:
           retention-days: 30
 
       # 同时发布到 Release：可直接下载，无需登录，便于传到手机安装
+      # 用 macOS runner 自带的 gh CLI，避免引入第三方 action
       - name: Publish to GitHub Release
         if: github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: build-${{ github.run_number }}
-          name: TodoAttendance ${{ github.run_number }}
-          draft: false
-          prerelease: false
-          body: |
-            待办考勤 iOS App（TrollStore 安装版）
-
-            - 设备要求：iOS 14.0 – 16.6.1 / 17.0（需已安装 TrollStore）
-            - 安装：下载 `TodoAttendance.ipa` → 传到手机 → 用 TrollStore 打开安装
-            - 数据存放在服务端，App 本身不存业务数据
-          files:
-            - TodoAttendance.ipa
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: build-${{ github.run_number }}
+        run: |
+          set -e
+          gh release create "$TAG" TodoAttendance.ipa --title "TodoAttendance $TAG" --notes "待办考勤 iOS App（TrollStore 安装版）。设备要求：iOS 14.0-16.6.1 或 17.0，需已安装 TrollStore。数据存放在服务端，App 本身不存业务数据。"
+          echo "Release 已发布：$TAG"
