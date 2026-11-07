@@ -22,6 +22,14 @@ jobs:
         working-directory: .
         run: xcodegen generate
 
+      - name: Syntax check (fast fail)
+        working-directory: .
+        run: |
+          set -e
+          # 只做语法解析（不完整编译），Swift 语法错误能在几秒内暴露，
+          # 不用等完整 xcodebuild 跑完
+          xcrun swiftc -parse -target arm64-apple-ios15.0 Sources/AppDelegate.swift
+
       - name: Build app (no signing)
         working-directory: .
         run: |

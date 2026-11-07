@@ -221,8 +221,9 @@ final class MainViewController: UIViewController {
                       let minute = it["minute"] as? Int else { continue }
                 let title = (it["title"] as? String) ?? "待办提醒"
                 let dateStr = (it["due"] as? String) ?? ""
-                let repeat = it["repeat"] as? [String: Any]
-                let repType = (repeat?["type"] as? String) ?? ""
+                // 注意：repeat 是 Swift 保留关键字，不能用作变量名
+                let repInfo = it["repeat"] as? [String: Any]
+                let repType = (repInfo?["type"] as? String) ?? ""
 
                 // 通知内容
                 let content = UNMutableNotificationContent()
@@ -241,7 +242,6 @@ final class MainViewController: UIViewController {
                 func unWeekday(_ our: Int) -> Int { return (our % 7) + 1 }
 
                 var triggers: [UNCalendarNotificationTrigger] = []
-                let repType = (repeat?["type"] as? String) ?? ""
 
                 if repType == "daily" {
                     // 每天：只设时刻，不限定星期
@@ -254,13 +254,13 @@ final class MainViewController: UIViewController {
                         triggers.append(UNCalendarNotificationTrigger(dateMatching: c, repeats: true))
                     }
                 } else if repType == "weekly",
-                          let days = repeat?["days"] as? [Int], !days.isEmpty {
+                          let days = repInfo?["days"] as? [Int], !days.isEmpty {
                     for d in days {
                         var c = dateComponents
                         c.weekday = unWeekday(d)
                         triggers.append(UNCalendarNotificationTrigger(dateMatching: c, repeats: true))
                     }
-                } else if repType == "monthly", let dom = repeat?["day_of_month"] as? Int {
+                } else if repType == "monthly", let dom = repInfo?["day_of_month"] as? Int {
                     var c = dateComponents
                     c.day = dom
                     triggers = [UNCalendarNotificationTrigger(dateMatching: c, repeats: true)]
