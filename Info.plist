@@ -20,6 +20,23 @@
     <string>$(MARKETING_VERSION)</string>
     <key>CFBundleVersion</key>
     <string>$(CURRENT_PROJECT_VERSION)</string>
+
+    <!-- App 图标（显式声明，不依赖 Xcode 自动生成，保证 TrollStore 安装后有图标） -->
+    <key>CFBundleIcons</key>
+    <dict>
+        <key>CFBundlePrimaryIcon</key>
+        <dict>
+            <key>CFBundleIconFiles</key>
+            <array>
+                <string>icon-1024</string>
+            </array>
+            <key>UIPrerenderedIcon</key>
+            <false/>
+        </dict>
+    </dict>
+    <key>CFBundleIconName</key>
+    <string>AppIcon</string>
+
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>UILaunchScreen</key>
