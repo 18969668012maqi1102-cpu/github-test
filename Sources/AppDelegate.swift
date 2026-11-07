@@ -135,6 +135,17 @@ final class MainViewController: UIViewController {
 
         let controller = WKUserContentController()
         controller.add(self, name: messageHandlerName)
+        // 在文档开始时注入桥接函数：页面刷新/导航后依然存在
+        let bridge = WKUserScript(source: """
+        window.__nativeScheduleReminders = function(items) {
+          try {
+            window.webkit.messageHandlers.todoNative.postMessage({action:'schedule', items: items});
+          } catch (e) {}
+        };
+        window.__nativeNotifyEnabled = function(ok) { window.__nativeNotifyOK = !!ok; };
+        window.__nativeNotifyPermission = function(ok) { window.__nativeNotifyPermOK = !!ok; };
+        """, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+        controller.addUserScript(bridge)
         config.userContentController = controller
 
         webView = WKWebView(frame: .zero, configuration: config)
@@ -194,6 +205,91 @@ final class MainViewController: UIViewController {
     private func cancelNativeReminder(id: String) {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["todo_\(id)"])
     }
+
+    /// 把未来的提醒排成本地系统通知。
+    /// 本地通知由 iOS 调度，**不需要 App 在运行**，因此后台/关闭都能响。
+    private func scheduleLocalReminders(items: [[String: Any]]) {
+        let center = UNUserNotificationCenter.current()
+        // 先清掉之前排的（用固定前缀标识本应用排的）
+        center.getPendingNotificationRequests { pending in
+            let mine = pending.map { $0.identifier }.filter { $0.hasPrefix("todo_rem_") }
+            center.removePendingNotificationRequests(withIdentifiers: mine)
+
+            for it in items {
+                guard let id = it["id"] as? String,
+                      let hour = it["hour"] as? Int,
+                      let minute = it["minute"] as? Int else { continue }
+                let title = (it["title"] as? String) ?? "待办提醒"
+                let dateStr = (it["due"] as? String) ?? ""
+                let repeat = it["repeat"] as? [String: Any]
+                let repType = (repeat?["type"] as? String) ?? ""
+
+                // 通知内容
+                let content = UNMutableNotificationContent()
+                content.title = "待办提醒 · \(title)"
+                content.body = dateStr.isEmpty ? "" : "\(dateStr) \(String(format: "%02d:%02d", hour, minute))"
+                content.sound = .default
+
+                var dateComponents = DateComponents()
+                dateComponents.hour = hour
+                dateComponents.minute = minute
+                dateComponents.second = 0
+
+                // 本项目约定 days: 1=周一 ... 7=周日
+                // UNCalendarNotificationTrigger 的 weekday: 1=周日 ... 7=周六
+                // 换算：un_weekday = (our_day % 7) + 1
+                func unWeekday(_ our: Int) -> Int { return (our % 7) + 1 }
+
+                var triggers: [UNCalendarNotificationTrigger] = []
+                let repType = (repeat?["type"] as? String) ?? ""
+
+                if repType == "daily" {
+                    // 每天：只设时刻，不限定星期
+                    triggers = [UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)]
+                } else if repType == "workday" {
+                    // 工作日：周一至周五各排一条
+                    for d in 1...5 {
+                        var c = dateComponents
+                        c.weekday = unWeekday(d)
+                        triggers.append(UNCalendarNotificationTrigger(dateMatching: c, repeats: true))
+                    }
+                } else if repType == "weekly",
+                          let days = repeat?["days"] as? [Int], !days.isEmpty {
+                    for d in days {
+                        var c = dateComponents
+                        c.weekday = unWeekday(d)
+                        triggers.append(UNCalendarNotificationTrigger(dateMatching: c, repeats: true))
+                    }
+                } else if repType == "monthly", let dom = repeat?["day_of_month"] as? Int {
+                    var c = dateComponents
+                    c.day = dom
+                    triggers = [UNCalendarNotificationTrigger(dateMatching: c, repeats: true)]
+                } else if repType == "yearly" {
+                    var c = dateComponents
+                    c.month = 1
+                    c.day = 1
+                    triggers = [UNCalendarNotificationTrigger(dateMatching: c, repeats: true)]
+                } else {
+                    // 一次性：指定完整日期
+                    let parts = dateStr.split(separator: "-").compactMap { Int($0) }
+                    if parts.count == 3 {
+                        dateComponents.year = parts[0]
+                        dateComponents.month = parts[1]
+                        dateComponents.day = parts[2]
+                    }
+                    triggers = [UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)]
+                }
+
+                var idx = 0
+                for t in triggers {
+                    let req = UNNotificationRequest(identifier: "todo_rem_\(id)_\(idx)",
+                                                    content: content, trigger: t)
+                    center.add(req) { _ in }
+                    idx += 1
+                }
+            }
+        }
+    }
 }
 
 // MARK: - JS 桥接
@@ -205,6 +301,10 @@ extension MainViewController: WKScriptMessageHandler {
         let action = body["action"] as? String ?? ""
 
         switch action {
+        case "schedule":
+            // 网页把未来提醒一次性交给原生，由 iOS 排本地通知（App 不运行也能响）
+            let items = body["items"] as? [[String: Any]] ?? []
+            scheduleLocalReminders(items: items)
         case "notify":
             guard let id = body["id"] as? String else { return }
             let title = body["title"] as? String ?? ""
