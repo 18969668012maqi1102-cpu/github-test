@@ -6,8 +6,16 @@ import UserNotifications
 
 @main
 final class AppDelegate: UIResponder, UIApplicationDelegate {
+    // Info.plist 未声明 UIApplicationSceneManifest → 走旧的应用生命周期，
+    // 必须自己创建 window 并设置 rootViewController，否则启动就是黑屏。
+    var window: UIWindow?
+
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        let w = UIWindow(frame: UIScreen.main.bounds)
+        w.rootViewController = MainViewController()
+        w.makeKeyAndVisible()
+        window = w
         return true
     }
 
@@ -28,10 +36,91 @@ final class MainViewController: UIViewController {
     private var webView: WKWebView!
     private let messageHandlerName = "todoNative"
 
+    // 加载失败兜底（网络不通 / 域名解析失败等），避免白屏无从下手
+    private var errorView: UIView?
+    private var loadingView: UIView?
+
     override func viewDidLoad() {
         super.viewDidLoad()
+        view.backgroundColor = .white
         setupWebView()
         setupNotificationCenter()
+        showLoading()
+        loadApp()
+    }
+
+    // MARK: 加载状态提示
+
+    private func showLoading() {
+        let v = UIView(frame: view.bounds)
+        v.backgroundColor = .white
+        let label = UILabel(frame: CGRect(x: 0, y: 0, width: 260, height: 60))
+        label.text = "正在加载…"
+        label.textAlignment = .center
+        label.textColor = UIColor(white: 0.45, alpha: 1)
+        label.font = UIFont.systemFont(ofSize: 15)
+        label.center = v.center
+        v.addSubview(label)
+        v.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(v)
+        loadingView = v
+    }
+
+    private func hideLoading() {
+        loadingView?.removeFromSuperview()
+        loadingView = nil
+    }
+
+    private func showError(_ message: String) {
+        hideLoading()
+        errorView?.removeFromSuperview()
+
+        let v = UIView(frame: view.bounds)
+        v.backgroundColor = .white
+        v.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+
+        let icon = UILabel(frame: CGRect(x: 0, y: 0, width: 40, height: 40))
+        icon.text = "⚠️"
+        icon.font = UIFont.systemFont(ofSize: 32)
+        icon.center = CGPoint(x: v.bounds.midX, y: v.bounds.midY - 70)
+        v.addSubview(icon)
+
+        let title = UILabel(frame: CGRect(x: 0, y: 0, width: 300, height: 30))
+        title.text = "无法连接到服务器"
+        title.textAlignment = .center
+        title.textColor = UIColor(white: 0.15, alpha: 1)
+        title.font = UIFont.systemFont(ofSize: 17, weight: .semibold)
+        title.center = CGPoint(x: v.bounds.midX, y: v.bounds.midY - 30)
+        v.addSubview(title)
+
+        let detail = UILabel(frame: CGRect(x: 0, y: 0, width: 300, height: 70))
+        detail.text = message
+        detail.textAlignment = .center
+        detail.numberOfLines = 4
+        detail.textColor = UIColor(white: 0.5, alpha: 1)
+        detail.font = UIFont.systemFont(ofSize: 13)
+        detail.center = CGPoint(x: v.bounds.midX, y: v.bounds.midY + 12)
+        v.addSubview(detail)
+
+        let retry = UIButton(type: .system)
+        retry.setTitle("重新加载", for: .normal)
+        retry.titleLabel?.font = UIFont.systemFont(ofSize: 16, weight: .medium)
+        retry.backgroundColor = UIColor(red: 0.145, green: 0.388, blue: 0.922, alpha: 1)
+        retry.setTitleColor(.white, for: .normal)
+        retry.layer.cornerRadius = 9
+        retry.frame = CGRect(x: 0, y: 0, width: 160, height: 44)
+        retry.center = CGPoint(x: v.bounds.midX, y: v.bounds.midY + 75)
+        retry.addTarget(self, action: #selector(retryLoad), for: .touchUpInside)
+        v.addSubview(retry)
+
+        view.addSubview(v)
+        errorView = v
+    }
+
+    @objc private func retryLoad() {
+        errorView?.removeFromSuperview()
+        errorView = nil
+        showLoading()
         loadApp()
     }
 
@@ -63,7 +152,10 @@ final class MainViewController: UIViewController {
     }
 
     private func loadApp() {
-        guard let url = URL(string: appURLString) else { return }
+        guard let url = URL(string: appURLString) else {
+            showError("应用地址无效")
+            return
+        }
         var request = URLRequest(url: url)
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.timeoutInterval = 30
@@ -138,6 +230,43 @@ extension MainViewController: WKScriptMessageHandler {
 // MARK: - 导航与权限
 
 extension MainViewController: WKNavigationDelegate {
+    // 加载完成 → 隐藏 loading
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        hideLoading()
+    }
+
+    // 加载失败 → 显示可读的错误提示（而不是白屏）
+    func webView(_ webView: WKWebView,
+                 didFail navigation: WKNavigation!,
+                 withError error: Error) {
+        showError(Self.describe(error))
+    }
+
+    func webView(_ webView: WKWebView,
+                 didFailProvisionalNavigation navigation: WKNavigation!,
+                 withError error: Error) {
+        showError(Self.describe(error))
+    }
+
+    private static func describe(_ error: Error) -> String {
+        let ns = error as NSError
+        if ns.domain == NSURLErrorDomain {
+            switch ns.code {
+            case NSURLErrorCannotFindHost:
+                return "找不到服务器。请检查网络连接，或确认能访问 todo-attendance.app.workbuddy.host。"
+            case NSURLErrorNotConnectedToInternet:
+                return "设备没有网络连接。"
+            case NSURLErrorTimedOut:
+                return "连接超时，请检查网络后重试。"
+            case NSURLErrorCannotConnectToHost:
+                return "无法连接到服务器，请稍后重试。"
+            default:
+                break
+            }
+        }
+        return ns.localizedDescription
+    }
+
     func webView(_ webView: WKWebView,
                  decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
