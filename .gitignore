@@ -10,3 +10,18 @@ desktop.ini
 
 # 临时提交信息文件
 commit_msg.txt
+
+# XcodeGen 生成物
+*.xcodeproj/
+*.xcworkspace/
+
+# 构建产物
+build/
+DerivedData/
+*.ipa
+*.app
+.DS_Store
+
+# ldid 下载的临时文件
+ldid
+ldid.tar.gz

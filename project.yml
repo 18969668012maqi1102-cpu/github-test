@@ -1,0 +1,34 @@
+name: TodoAttendance
+options:
+  bundleIdPrefix: com.workbuddy
+  deploymentTarget:
+    iOS: "15.0"        # WKWebView Notification API 需 16.4+，但壳本身 15.0 即可
+  createIntermediateGroups: true
+settings:
+  base:
+    PRODUCT_BUNDLE_IDENTIFIER: com.workbuddy.todoattendance
+    PRODUCT_NAME: TodoAttendance
+    SWIFT_VERSION: "5.9"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    INFOPLIST_FILE: Info.plist
+    ENABLE_BITCODE: "NO"
+    CODE_SIGNING_ALLOWED: "NO"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # 安全：不做任何日志输出业务数据
+    SWIFT_ACTIVE_COMPILATION_CONDITIONS: "DEBUG"
+targets:
+  TodoAttendance:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+    dependencies: []
+
+schemes:
+  TodoAttendance:
+    build:
+      targets:
+        TodoAttendance: all
+    run:
+      target: TodoAttendance

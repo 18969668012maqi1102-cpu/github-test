@@ -1,0 +1,84 @@
+name: Build IPA (TrollStore)
+
+on:
+  workflow_dispatch:        # 手动触发
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: Build unsigned IPA for TrollStore
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: .
+        run: xcodegen generate
+
+      - name: Build app (no signing)
+        working-directory: .
+        run: |
+          set -e
+          xcodebuild -scheme TodoAttendance -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            -derivedDataPath build/DerivedData \
+            build
+
+      - name: Install ldid (fake signer)
+        run: |
+          set -e
+          # ldid 做 ad-hoc 伪签名。TrollStore 安装时会用伪造根证书重签，
+          # 并保留这里预签的 entitlements（我们不需要额外权限，故用空签名）。
+          curl -fsSL -o ldid.tar.gz \
+            https://github.com/ProcursusTeam/ldid/releases/download/2.1.5-procursus/ldid2.1.5-procursus.tar.gz
+          tar -xzf ldid.tar.gz
+          sudo mv ./ldid /usr/local/bin/ldid
+          sudo chmod 755 /usr/local/bin/ldid
+          ldid -h 2>&1 | head -3 || true
+
+      - name: Fakesign & package IPA
+        working-directory: .
+        run: |
+          set -e
+          APP=$(find build/DerivedData/Build/Products -name 'TodoAttendance.app' -type d -maxdepth 3 | head -1)
+          echo "Found app: $APP"
+          test -n "$APP"
+
+          # 伪签名主二进制
+          ldid -S "$APP/TodoAttendance"
+
+          # 处理内嵌 framework / dylib（若有）
+          find "$APP" -name "*.framework" -type d -maxdepth 4 2>/dev/null | while read -r fw; do
+            BIN="$fw/$(basename "$fw" .framework)"
+            if [ -f "$BIN" ]; then ldid -S "$BIN" || true; fi
+          done
+          find "$APP" -name "*.dylib" -type f 2>/dev/null | while read -r dylib; do
+            ldid -S "$dylib" || true
+          done
+
+          # 构造标准 IPA 结构：Payload/<App>.app
+          rm -rf build/Payload
+          mkdir -p build/Payload
+          cp -R "$APP" build/Payload/
+          cd build
+          zip -qry ../TodoAttendance.ipa Payload
+          cd ..
+          ls -lh TodoAttendance.ipa
+          echo "--- IPA 结构 ---"
+          unzip -l TodoAttendance.ipa | head -25
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TodoAttendance-ipa
+          path: TodoAttendance.ipa
+          retention-days: 30
