@@ -305,6 +305,13 @@ extension MainViewController: WKScriptMessageHandler {
             // 网页把未来提醒一次性交给原生，由 iOS 排本地通知（App 不运行也能响）
             let items = body["items"] as? [[String: Any]] ?? []
             scheduleLocalReminders(items: items)
+        case "openExternal":
+            // 用系统浏览器打开（webcal:// 会唤起 iOS 的「添加到日历」流程）
+            if let u = body["url"] as? String, let url = URL(string: u) {
+                DispatchQueue.main.async {
+                    UIApplication.shared.open(url, options: [:], completionHandler: nil)
+                }
+            }
         case "notify":
             guard let id = body["id"] as? String else { return }
             let title = body["title"] as? String ?? ""
